@@ -1,9 +1,8 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import Link from "next/link";
 import { SiteShell } from "@/components/SiteShell";
 import {
-  MOTOR_DATA,
   getBrand,
   getModel,
   modelFullName,
@@ -11,172 +10,217 @@ import {
 } from "@/knowledge/motor-data";
 import { getModelContent } from "@/knowledge/model-content";
 
-// Halaman ini di-prender untuk semua motor saat build
+// ─── Static Params ───────────────────────────────────────────────────────────
 export function generateStaticParams() {
-  return allModelEntries().map(({ brandId, modelId }) => ({
+  return allModelEntries().map(({ brandId, model }) => ({
     brand: brandId,
-    model: modelId,
+    model: model.id,
   }));
 }
 
-type Props = {
+// ─── Metadata ────────────────────────────────────────────────────────────────
+export async function generateMetadata({
+  params,
+}: {
   params: Promise<{ brand: string; model: string }>;
-};
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+}): Promise<Metadata> {
   const { brand: brandId, model: modelId } = await params;
   const brand = getBrand(brandId);
-  const model = getModel(brandId, modelId);
-  if (!brand || !model) return { title: "Motor tidak ditemukan" };
-
+  const model = brand ? getModel(brandId, modelId) : undefined;
+  if (!brand || !model) return {};
+  const fullName = modelFullName(brand, model);
   return {
-    title: `${brand.name} ${model.name} — Keluhan & Biaya Servis`,
-    description: `Keluhan umum, estimasi biaya servis, dan diagnosa untuk ${brand.name} ${model.name}.`,
+    title: `${fullName} — Motor Diagnosa`,
+    description: `Keluhan umum, jadwal servis, dan diagnosa AI untuk ${fullName}. Gratis, tanpa login.`,
   };
 }
 
-export default async function MotorDetailPage({ params }: Props) {
+// ─── Komponen badge tipe motor ────────────────────────────────────────────────
+const TYPE_COLOR: Record<string, string> = {
+  Matic:     "bg-blue-100 text-blue-700",
+  Bebek:     "bg-emerald-100 text-emerald-700",
+  Sport:     "bg-orange-100 text-orange-700",
+  Offroad:   "bg-yellow-100 text-yellow-700",
+  Classic:   "bg-purple-100 text-purple-700",
+  Cruiser:   "bg-rose-100 text-rose-700",
+  Supermoto: "bg-teal-100 text-teal-700",
+  Listrik:   "bg-lime-100 text-lime-700",
+};
+
+// ─── Page ────────────────────────────────────────────────────────────────────
+export default async function MotorDetailPage({
+  params,
+}: {
+  params: Promise<{ brand: string; model: string }>;
+}) {
   const { brand: brandId, model: modelId } = await params;
-
   const brand = getBrand(brandId);
-  const model = getModel(brandId, modelId);
-  if (!brand || !model) notFound();
+  const model = brand ? getModel(brandId, modelId) : undefined;
 
-  const namaMotor = modelFullName(brand, model);
-  const konten = getModelContent(model);
+  if (!brand || !model) {
+    notFound();
+  }
 
-  // Link ke diagnosa dengan motor yang sudah dipilih otomatis
-  const linkDiagnosa = `/diagnosa?motor=${encodeURIComponent(namaMotor)}`;
+  const content   = getModelContent(model);
+  const fullName  = modelFullName(brand, model);
+  const typeColor = TYPE_COLOR[model.type] ?? "bg-slate-100 text-slate-600";
 
-  // Motor lain dari merk yang sama
-  const motorLain = brand.models.filter((m) => m.id !== model.id).slice(0, 6);
+  // Chip contoh keluhan untuk motor ini
+  const contohKeluhan = content.keluhanUmum.slice(0, 3);
 
   return (
     <SiteShell>
       <div className="max-w-5xl mx-auto px-4 py-10">
+
         {/* Breadcrumb */}
-        <nav className="flex items-center gap-2 text-xs text-slate-400 mb-6">
-          <Link href="/" className="hover:text-blue-600">
-            Beranda
-          </Link>
+        <nav className="flex items-center gap-1.5 text-xs text-slate-400 mb-6 flex-wrap">
+          <Link href="/" className="hover:text-blue-600 transition-colors">Beranda</Link>
           <span>/</span>
-          <Link href="/motor" className="hover:text-blue-600">
-            Motor
-          </Link>
+          <Link href="/motor" className="hover:text-blue-600 transition-colors">Motor</Link>
           <span>/</span>
-          <span className="text-slate-600 font-semibold">{namaMotor}</span>
+          <Link href={`/motor/${brandId}`} className="hover:text-blue-600 transition-colors capitalize">{brand.name}</Link>
+          <span>/</span>
+          <span className="text-slate-600 font-medium">{model.name}</span>
         </nav>
 
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-8">
+        {/* Header motor */}
+        <div className="flex items-start gap-5 mb-10">
           <div
-            className={`w-16 h-16 rounded-2xl ${brand.color} text-white font-extrabold text-3xl flex items-center justify-center shrink-0`}
+            className={`w-16 h-16 rounded-2xl ${brand.color} text-white font-extrabold text-2xl flex items-center justify-center shrink-0 shadow-md`}
           >
             {brand.name[0]}
           </div>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-              {brand.name} · {model.type} · {model.tahun}
-            </p>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">
-              {model.name}
+            <h1 className="text-2xl md:text-3xl font-extrabold text-slate-900 leading-tight mb-1">
+              {fullName}
             </h1>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-lg ${typeColor}`}>
+                {model.type}
+              </span>
+              <span className="text-xs text-slate-400 font-medium">
+                Tahun {model.tahun}
+              </span>
+            </div>
           </div>
         </div>
 
-        {/* CTA utama — inilah titik masuk traffic Google ke aplikasi */}
-        <div className="bg-blue-600 text-white rounded-2xl p-6 mb-10">
-          <h2 className="text-lg font-extrabold mb-1">
-            Ada masalah dengan {namaMotor} Anda?
-          </h2>
-          <p className="text-blue-100 text-sm mb-4">
-            Ceritakan keluhan Anda, AI akan bantu perkirakan penyebab dan biaya
-            perbaikannya.
-          </p>
-          <Link
-            href={linkDiagnosa}
-            className="inline-block px-5 py-3 rounded-xl bg-white text-blue-700 font-bold hover:bg-blue-50 transition-colors"
-          >
-            🔧 Diagnosis motor ini
-          </Link>
-        </div>
+        <div className="grid md:grid-cols-2 gap-6">
 
-        {/* Keluhan umum */}
-        <section className="mb-10">
-          <h2 className="text-lg font-extrabold text-slate-900 mb-1">
-            Keluhan umum {model.name}
-          </h2>
-          <p className="text-sm text-slate-500 mb-4">
-            Keluhan yang sering dilaporkan pengguna {model.name}.
-          </p>
-          <div className="grid sm:grid-cols-2 gap-3">
-            {konten.keluhanUmum.map((k) => (
-              <Link
-                key={k}
-                href={linkDiagnosa}
-                className="flex items-center justify-between gap-2 p-4 rounded-xl bg-white border border-slate-200 hover:border-blue-400 hover:bg-blue-50 transition-colors group"
-              >
-                <span className="text-sm font-semibold text-slate-700">{k}</span>
-                <span className="text-slate-300 group-hover:text-blue-500 shrink-0">
-                  →
-                </span>
-              </Link>
-            ))}
-          </div>
-        </section>
-
-        {/* Info perawatan */}
-        <section className="bg-white border border-slate-200 rounded-2xl p-6 mb-10">
-          <h2 className="text-lg font-extrabold text-slate-900 mb-4">
-            Catatan perawatan
-          </h2>
-          <div className="grid sm:grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Interval servis
-              </p>
-              <p className="font-semibold text-slate-800">{konten.intervalSpa}</p>
-            </div>
-            <div>
-              <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-1">
-                Catatan
-              </p>
-              <p className="font-semibold text-slate-800">{konten.catatanSpa}</p>
-            </div>
-          </div>
-          <Link
-            href="/biaya"
-            className="inline-block mt-5 text-sm font-semibold text-blue-600 hover:text-blue-700"
-          >
-            Lihat referensi biaya servis →
-          </Link>
-        </section>
-
-        {/* Motor lain */}
-        {motorLain.length > 0 && (
-          <section>
-            <h2 className="text-lg font-extrabold text-slate-900 mb-4">
-              Motor {brand.name} lainnya
+          {/* Keluhan Umum */}
+          <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h2 className="text-base font-extrabold text-slate-900 mb-1">
+              🔧 Keluhan Umum
             </h2>
-            <div className="flex flex-wrap gap-2">
-              {motorLain.map((m) => (
-                <Link
-                  key={m.id}
-                  href={`/motor/${brand.id}/${m.id}`}
-                  className="px-4 py-2.5 rounded-full bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors"
-                >
-                  {m.name}
-                </Link>
+            <p className="text-xs text-slate-400 mb-4">
+              Masalah yang paling sering dilaporkan pengguna {model.name}.
+            </p>
+            <ul className="space-y-2.5">
+              {content.keluhanUmum.map((keluhan, i) => (
+                <li key={i} className="flex items-start gap-2.5">
+                  <span className="shrink-0 w-5 h-5 rounded-full bg-blue-100 text-blue-600 text-[10px] font-bold flex items-center justify-center mt-0.5">
+                    {i + 1}
+                  </span>
+                  <span className="text-sm text-slate-700 leading-snug">{keluhan}</span>
+                </li>
               ))}
+            </ul>
+
+            {/* Chip keluhan cepat */}
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <p className="text-xs text-slate-400 font-medium mb-2">Langsung diagnosa keluhan ini:</p>
+              <div className="flex flex-wrap gap-2">
+                {contohKeluhan.map((k) => (
+                  <Link
+                    key={k}
+                    href={`/diagnosa?motor=${encodeURIComponent(fullName)}&q=${encodeURIComponent(k)}`}
+                    className="px-3 py-1.5 text-xs font-semibold rounded-full border border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                  >
+                    {k}
+                  </Link>
+                ))}
+              </div>
             </div>
           </section>
-        )}
 
-        <p className="mt-10 pt-6 border-t border-slate-200 text-xs text-slate-400 italic">
-          Informasi pada halaman ini bersifat umum dan menjadi perkiraan awal.
-          Harga dan gejala dapat berbeda tergantung kondisi, tahun, dan lokasi
-          bengkel Anda.
-        </p>
+          {/* Jadwal Servis */}
+          <section className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
+            <h2 className="text-base font-extrabold text-slate-900 mb-1">
+              📅 Jadwal Servis Berkala
+            </h2>
+            <p className="text-xs text-slate-400 mb-4">
+              Estimasi umum untuk tipe {model.type}. Ikuti buku manual untuk angka pasti.
+            </p>
+
+            <div className="space-y-3">
+              <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
+                <span className="text-sm text-slate-600">🔄 Ganti Oli Mesin</span>
+                <span className="text-sm font-bold text-slate-800">
+                  {model.type === "Sport" ? "2.500 km" : model.type === "Offroad" || model.type === "Supermoto" ? "1.500–2.000 km" : "2.000–2.500 km"}
+                </span>
+              </div>
+              <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
+                <span className="text-sm text-slate-600">⚡ Ganti Busi</span>
+                <span className="text-sm font-bold text-slate-800">
+                  {model.type === "Sport" ? "12.000 km" : "8.000 km"}
+                </span>
+              </div>
+              {(model.type === "Matic") && (
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
+                  <span className="text-sm text-slate-600">⚙️ Servis CVT / V-Belt</span>
+                  <span className="text-sm font-bold text-slate-800">20.000–25.000 km</span>
+                </div>
+              )}
+              {(model.type === "Bebek" || model.type === "Sport" || model.type === "Offroad" || model.type === "Supermoto") && (
+                <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
+                  <span className="text-sm text-slate-600">🔗 Rantai & Gear Set</span>
+                  <span className="text-sm font-bold text-slate-800">
+                    {model.type === "Offroad" || model.type === "Supermoto" ? "10.000–15.000 km" : "15.000 km"}
+                  </span>
+                </div>
+              )}
+              <div className="flex justify-between items-center py-2.5 border-b border-slate-100">
+                <span className="text-sm text-slate-600">🛑 Kampas Rem</span>
+                <span className="text-sm font-bold text-slate-800">10.000–15.000 km</span>
+              </div>
+              <div className="flex justify-between items-center py-2.5">
+                <span className="text-sm text-slate-600">💨 Filter Udara</span>
+                <span className="text-sm font-bold text-slate-800">10.000 km</span>
+              </div>
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-slate-100">
+              <p className="text-[11px] text-slate-400 italic leading-relaxed">
+                {content.catatanSpa}
+              </p>
+            </div>
+          </section>
+        </div>
+
+        {/* CTA Diagnosa */}
+        <div className="mt-8 bg-gradient-to-r from-blue-600 to-blue-700 rounded-2xl p-6 md:p-8 text-white text-center shadow-lg">
+          <p className="text-sm text-blue-100 mb-2">Punya keluhan dengan {model.name} Anda?</p>
+          <h2 className="text-xl md:text-2xl font-extrabold mb-4">
+            Diagnosa sekarang, gratis 🔧
+          </h2>
+          <Link
+            href={`/diagnosa?motor=${encodeURIComponent(fullName)}`}
+            className="inline-block px-6 py-3 bg-white text-blue-700 font-bold rounded-xl text-sm hover:bg-blue-50 shadow-md transition-colors"
+          >
+            Mulai Diagnosa {model.name}
+          </Link>
+        </div>
+
+        {/* Link kembali */}
+        <div className="mt-8">
+          <Link
+            href="/motor"
+            className="text-sm font-semibold text-slate-500 hover:text-blue-600 transition-colors"
+          >
+            ← Kembali ke Daftar Motor
+          </Link>
+        </div>
+
       </div>
     </SiteShell>
   );

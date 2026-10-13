@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import { ResultCard, type ResultData } from "@/components/ResultCard";
 import { MOTOR_DATA, type BrandId } from "@/knowledge/motor-data";
+import { saveRiwayat } from "@/lib/riwayat";
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Types
@@ -275,10 +276,12 @@ function ChatBubble({
   message,
   onQuickReply,
   isLastAI,
+  motor,
 }: {
   message: ChatMessage;
   onQuickReply?: (text: string) => void;
   isLastAI: boolean;
+  motor?: string;
 }) {
   if (message.role === "user") {
     return (
@@ -306,7 +309,7 @@ function ChatBubble({
           )}
           {message.kind === "hasil" && (
             <div className="bg-white border border-slate-200 rounded-2xl rounded-bl-sm px-4 py-4 shadow-sm w-full">
-              <ResultCard data={message.data} />
+              <ResultCard data={message.data} motor={motor} />
             </div>
           )}
           {message.kind === "error" && (
@@ -344,39 +347,78 @@ export function DiagnosaApp() {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [askCount, setAskCount] = useState(0);
+  // Query dari URL ?q= atau ?motor= yang belum dikirim ke AI
+  const [pendingQuery, setPendingQuery] = useState<string | null>(null);
+  // Keluhan pertama dalam sesi ini (untuk konteks riwayat)
+  const [firstKeluhan, setFirstKeluhan] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Restore state saat halaman dimuat.
-  // Kalau URL membawa ?motor=... (dari halaman detail motor),
-  // motor itu langsung dipakai dan riwayat dibersihkan supaya tidak tercampur.
+  // Prioritas baca URL:
+  //   ?motor=       → set motor, kosongkan riwayat
+  //   ?q=           → simpan sebagai pendingQuery, akan dikirim ke AI setelah motor diketahui
+  //   ?motor= + ?q= → set motor langsung lalu kirim query (dari chip di halaman detail motor)
   useEffect(() => {
-    const presetMotor = new URLSearchParams(window.location.search).get("motor");
+    const params = new URLSearchParams(window.location.search);
+    const presetMotor = params.get("motor");
+    const presetQuery = params.get("q");
+
+    // Bersihkan URL lebih awal
+    if (presetMotor || presetQuery) {
+      window.history.replaceState(null, "", "/diagnosa");
+    }
 
     if (presetMotor) {
+      // Motor sudah diketahui dari URL
       setMotor(presetMotor);
       setMessages([]);
       setAskCount(0);
       localStorage.setItem(LS_MOTOR_KEY, presetMotor);
       sessionStorage.removeItem(SS_HISTORY_KEY);
+      // Jika ada query sekaligus, langsung kirim setelah mount
+      if (presetQuery) {
+        setTimeout(() => sendMessage(presetQuery), 150);
+      }
       return;
     }
 
+    // Motor tidak dari URL, coba dari localStorage
     const savedMotor = localStorage.getItem(LS_MOTOR_KEY);
-    if (savedMotor) setMotor(savedMotor);
-
-    const savedHistory = sessionStorage.getItem(SS_HISTORY_KEY);
-    if (savedHistory) {
-      try {
-        const { messages: msgs, askCount: ac } = JSON.parse(savedHistory);
-        setMessages(msgs);
-        setAskCount(ac);
-      } catch {
-        // Abaikan error parse
+    if (savedMotor) {
+      setMotor(savedMotor);
+      // Jika ada pending query dari chip beranda (?q=), langsung kirim
+      if (presetQuery) {
+        setMessages([]);
+        setAskCount(0);
+        sessionStorage.removeItem(SS_HISTORY_KEY);
+        setTimeout(() => sendMessage(presetQuery), 150);
+        return;
       }
     }
+
+    // Restore riwayat session (hanya jika tidak ada ?q=)
+    if (!presetQuery) {
+      const savedHistory = sessionStorage.getItem(SS_HISTORY_KEY);
+      if (savedHistory) {
+        try {
+          const { messages: msgs, askCount: ac } = JSON.parse(savedHistory);
+          setMessages(msgs);
+          setAskCount(ac);
+        } catch {
+          // Abaikan error parse
+        }
+      }
+    }
+
+    // Jika tidak ada motor di localStorage tapi ada ?q=, simpan sebagai pending
+    if (presetQuery && !savedMotor) {
+      setPendingQuery(presetQuery);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
 
   // Scroll otomatis ke bawah
   useEffect(() => {
@@ -411,6 +453,11 @@ export function DiagnosaApp() {
     async (text: string) => {
       const trimmed = text.trim();
       if (!trimmed || isLoading || !motor) return;
+
+      // Catat keluhan pertama sesi untuk riwayat
+      if (!firstKeluhan) {
+        setFirstKeluhan(trimmed);
+      }
 
       const userMsg: UserMessage = {
         id: generateId(),
@@ -453,10 +500,17 @@ export function DiagnosaApp() {
           ]);
         } else {
           setAskCount(0);
+          const hasilData = data as ResultData;
           setMessages((prev) => [
             ...prev,
-            { id: generateId(), role: "assistant", kind: "hasil", data: data as ResultData } as HasilMessage,
+            { id: generateId(), role: "assistant", kind: "hasil", data: hasilData } as HasilMessage,
           ]);
+          // Simpan ke riwayat secara otomatis
+          saveRiwayat(
+            motor,
+            firstKeluhan || trimmed,
+            hasilData
+          );
         }
       } catch {
         setMessages((prev) => [
@@ -467,15 +521,22 @@ export function DiagnosaApp() {
         setIsLoading(false);
       }
     },
-    [isLoading, motor, messages, askCount, buildHistory]
+    [isLoading, motor, messages, askCount, buildHistory, firstKeluhan]
   );
 
   const handleMotorSelect = (motorName: string) => {
     setMotor(motorName);
     localStorage.setItem(LS_MOTOR_KEY, motorName);
-    // Kosongkan pesan jika motor baru dipilih
+    // Kosongkan pesan dan keluhan jika motor baru dipilih
     setMessages([]);
     setAskCount(0);
+    setFirstKeluhan("");
+    // Jika ada pending query dari URL ?q=, kirim setelah motor dipilih
+    if (pendingQuery) {
+      setPendingQuery(null);
+      // Delay kecil agar state motor sudah ter-set
+      setTimeout(() => sendMessage(pendingQuery), 100);
+    }
   };
 
   const handleChangeMotor = () => {
@@ -483,6 +544,7 @@ export function DiagnosaApp() {
     setMotor("");
     setMessages([]);
     setAskCount(0);
+    setFirstKeluhan("");
     localStorage.removeItem(LS_MOTOR_KEY);
     sessionStorage.removeItem(SS_HISTORY_KEY);
   };
@@ -585,6 +647,7 @@ export function DiagnosaApp() {
               <ChatBubble
                 key={msg.id}
                 message={msg}
+                motor={motor}
                 onQuickReply={(text) => sendMessage(text)}
                 isLastAI={msg.id === lastAIMessage?.id}
               />

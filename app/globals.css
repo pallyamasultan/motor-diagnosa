@@ -1,1 +1,56 @@
+/* ─── Google Fonts (harus di baris paling atas sebelum @import lain) ─── */
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap");
+
 @import "tailwindcss";
+
+/* ─── Design Tokens ─────────────────────────────────────────── */
+:root {
+  --font-sans: "Plus Jakarta Sans", system-ui, sans-serif;
+
+  --color-brand:       #2563EB; /* blue-600  */
+  --color-brand-dark:  #1D4ED8; /* blue-700  */
+  --color-brand-light: #EFF6FF; /* blue-50   */
+
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 4px 0 rgba(0,0,0,.06), 0 4px 16px -4px rgba(0,0,0,.08);
+}
+
+/* ─── Base ───────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ─── Custom Scrollbar ───────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #CBD5E1; /* slate-300 */
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94A3B8; /* slate-400 */
+}
+
+/* ─── Focus Ring ─────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ─── Selection ──────────────────────────────────────────────── */
+::selection {
+  background: #BFDBFE; /* blue-200 */
+  color: #1E3A8A;      /* blue-900 */
+}

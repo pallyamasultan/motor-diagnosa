@@ -190,17 +190,6 @@ ${forceResultNote}`;
       { role: "user", content: message },
     ];
 
-    // Panggil model dengan retry ke fallback
-    const callModel = async (model: ReturnType<typeof primaryModel extends infer T ? () => T : never>) => {
-      // Tidak bisa pakai ReturnType trick dengan conditional — gunakan any
-      return await (generateText as any)({
-        model,
-        system: systemFull,
-        messages,
-        output: Output.object({ schema: outputSchema }),
-        abortSignal: AbortSignal.timeout(28000),
-      });
-    };
 
     let aiOutput: z.infer<typeof outputSchema>;
     try {

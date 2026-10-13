@@ -134,7 +134,7 @@ export default function Beranda() {
           {CONTOH_KELUHAN.map((c) => (
             <Link
               key={c}
-              href="/diagnosa"
+              href={`/diagnosa?q=${encodeURIComponent(c)}`}
               className="px-4 py-2.5 rounded-full bg-white border border-slate-200 text-sm font-semibold text-slate-700 hover:border-blue-400 hover:text-blue-700 hover:bg-blue-50 transition-colors"
             >
               {c}
